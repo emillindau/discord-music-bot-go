@@ -2,6 +2,7 @@ package spotify
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/zmb3/spotify"
 	"golang.org/x/oauth2/clientcredentials"
@@ -23,16 +24,34 @@ func (sc *SpotifyClient) init() error {
 	return nil;
 }
 
-func (sc *SpotifyClient) GetPlaylist(id string) (*spotify.FullPlaylist, error) {
+func (sc *SpotifyClient) GetPlaylist(id string) (sp []spotify.PlaylistTrack, err error) {
 	var spotifyID spotify.ID = spotify.ID(id)
-	playlist, err := sc.client.GetPlaylist(spotifyID)
-	// tracks, err := sc.client.GetPlaylistTracks(spotifyID)
+	// playlist, err := sc.client.GetPlaylist(spotifyID)
+	tracks, err := sc.client.GetPlaylistTracks(spotifyID)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return playlist, nil
+	sp = tracks.Tracks
+
+	// paginate
+	for page := 1; ; page++ {
+		err = sc.client.NextPage(tracks)
+
+		if err == spotify.ErrNoMorePages {
+			break;
+		}
+
+		if err != nil {
+			break;
+		}
+
+		sp = append(sp, tracks.Tracks...)
+	}
+	fmt.Printf("Playlist has %d tracks\n", len(sp))
+
+	return sp, nil
 }
 
 func NewSpotifyClient(clientID string, clientSecret string) (*SpotifyClient, error) {

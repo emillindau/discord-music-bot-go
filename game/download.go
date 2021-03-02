@@ -2,38 +2,35 @@ package game
 
 import (
 	"io"
-	"net/http"
 	"os"
-	"sync"
 
 	"github.com/jonas747/dca"
 )
 
-func downloadFile(name string, url string, wg *sync.WaitGroup) error {
-	defer wg.Done()
-	resp, err := http.Get(url)
+func downloadFile(name string, url string) error {
+	// resp, err := http.Get(url)
 
-	if err != nil {
-		return err
-	}
+	// if err != nil {
+	// 	return err
+	// }
 
-	defer resp.Body.Close()
+	// defer resp.Body.Close()
 
-	fileName := "temp/" + name + ".mp3"
-	// Create the file
-	out, err := os.Create(fileName)
-	if err != nil {
-		return err
-	}
+	// fileName := "temp/" + name + ".mp3"
+	// // Create the file
+	// out, err := os.Create(fileName)
+	// if err != nil {
+	// 	return err
+	// }
 
-	defer out.Close()
+	// defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return err
-	}
+	// _, err = io.Copy(out, resp.Body)
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = convertFromURLtoDCA(url, name)
+	err := convertFromURLtoDCA(url, name)
 	return err
 }
 

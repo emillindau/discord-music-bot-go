@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -18,7 +17,7 @@ type Game struct {
 }
 
 func (g *Game) init(playlistID string) error {
-	playlist, err := g.spotifyClient.GetPlaylist(playlistID)
+	tracks, err := g.spotifyClient.GetPlaylist(playlistID)
 
 	if err != nil {
 		return err
@@ -26,7 +25,7 @@ func (g *Game) init(playlistID string) error {
 
 	// TODO: Fetch all songs + youtube
 
-	for _, t := range playlist.Tracks.Tracks {
+	for _, t := range tracks {
 		pu := t.Track.PreviewURL
 
 		if (pu != "") {
@@ -36,19 +35,26 @@ func (g *Game) init(playlistID string) error {
 			}
 
 			artists := strings.Join(ar, ", ")
-			song := newSong(artists, t.Track.Name, t.Track.PreviewURL)
+			song := newSong(artists, t.Track.Name, t.Track.PreviewURL, t.Track.ID.String())
 			g.songs = append(g.songs, song)
 		}
 	}
 
+	fmt.Printf("Filtered out to %d tracks\n", len(g.songs))
+
+	sg := g.songs[:100]
+
 	var wg sync.WaitGroup
-	for i, s := range g.songs {
-		wg.Add(1)
-		go downloadFile(strconv.Itoa(i), s.url, &wg)
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, s := range sg {
+			downloadFile(s.id, s.downloadUrl)
+		}
+	}()
 	wg.Wait()
 
-	fmt.Println("songs", len(g.songs))
+	// fmt.Println("songs", len(g.songs))
 
 	return nil
 }
