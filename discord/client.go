@@ -1,20 +1,19 @@
 package client
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/emillindau/discord-music-bot-go/utils"
 )
 
 type DiscordClient struct {
 	token string
 	Session *discordgo.Session
+	Voice *discordgo.VoiceConnection
+	Channel *discordgo.Channel
 }
 
 func NewDiscordClient(token string) (*DiscordClient, error) {
@@ -54,20 +53,46 @@ func (dc *DiscordClient) init() error {
 	return nil
 }
 
-func (dc *DiscordClient) ListenForMessage() {
+func (dc *DiscordClient) ListenForMessage(c chan<- string) {
 	fmt.Println("Starting to listen for messages")
-	dc.Session.AddHandler(handleMessage)
+	dc.Session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		handleMessage(s, m, dc, c)
+	})
 }
 
 func (dc *DiscordClient) Exit() {
 	dc.Session.Close()
 }
 
-func (dc *DiscordClient) Play() {
+func (dc *DiscordClient) Play(path string, end chan<- bool) {
+	dc.Voice.Speaking(true)
 
+	// Send buffer bla bla
+	buffer, err := utils.LoadSound(path)
+	if err != nil {
+		dc.Voice.Speaking(false)
+		fmt.Println("could not play song")
+		return
+	}
+
+	for _, buff := range buffer {
+		dc.Voice.OpusSend <- buff
+	}
+
+	end <- true
+
+	dc.Voice.Speaking(false)
 }
 
-func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (dc *DiscordClient) SendMessage(message string) {
+	fmt.Println("trying to send message")
+	_, err := dc.Session.ChannelMessageSend(dc.Channel.ID, message)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, dc *DiscordClient, c chan<- string) {
 	// Ignore messages by the bot
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -79,6 +104,7 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			return
 		}
+		dc.Channel = channel
 
 		guild, err := s.State.Guild(channel.GuildID)
 		if err != nil {
@@ -88,82 +114,27 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Look up voice channel
 		for _, vs := range guild.VoiceStates {
 			if vs.UserID == m.Author.ID {
-				err = playSound(s, guild.ID, vs.ChannelID)
+				vc, err := joinChannel(s, guild.ID, vs.ChannelID)
 				if err != nil {
-					fmt.Println("Error playing ", err)
+					fmt.Println("Error joining channel ", err)
+					return
 				}
-				return
+				dc.Voice = vc
 			}
 		}
+
+	} else {
+		c <- m.Content
 	}
 
-	if m.Content == "ping" {
-		s.ChannelMessageSend(m.ChannelID, "Pong!")
-	}
-
-	if m.Content == "pong" {
-		s.ChannelMessageSend(m.ChannelID, "Ping!")
-	}
 }
 
-func loadSound(filePath string) ([][]byte, error) {
-	file, err := os.Open(filePath)
-
+func joinChannel(s *discordgo.Session, guildID string, channelID string) (*discordgo.VoiceConnection, error) {
+	// join voice channel
+	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
 	if err != nil {
 		return nil, err
 	}
 
-	var opuslen int16
-	var buffer = make([][]byte, 0)
-	for {
-		err = binary.Read(file, binary.LittleEndian, &opuslen)
-
-		// eof
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			err := file.Close()
-			if err != nil {
-				return nil, err
-			}
-			return buffer, nil
-		}
-
-		if err != nil {
-			fmt.Println("Error reading from file");
-			return nil, err
-		}
-
-		inBuf := make([]byte, opuslen)
-		err = binary.Read(file, binary.LittleEndian, &inBuf)
-
-		if err != nil {
-			fmt.Println("Error reading pcm")
-			return nil, err
-		}
-
-		buffer = append(buffer, inBuf)
-	}
-}
-
-func playSound(s *discordgo.Session, guildID string, channelID string) (err error) {
-	// join voice channel
-	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
-	if err != nil {
-		return err
-	}
-
-	time.Sleep(250 * time.Millisecond)
-
-	vc.Speaking(true)
-
-	// Send buffer bla bla
-	buffer, err := loadSound("temp/1.dca")
-	for _, buff := range buffer {
-		vc.OpusSend <- buff
-	}
-
-	vc.Speaking(false)
-
-	time.Sleep(250 * time.Millisecond)
-
-	return nil;
+	return vc, nil
 }
