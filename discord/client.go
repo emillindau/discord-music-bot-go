@@ -14,11 +14,14 @@ type DiscordClient struct {
 	Session *discordgo.Session
 	Voice *discordgo.VoiceConnection
 	Channel *discordgo.Channel
+	onStop chan bool
+	isPlaying bool
 }
 
 func NewDiscordClient(token string) (*DiscordClient, error) {
 	client := &DiscordClient{
 		token: token,
+		onStop: make(chan bool),
 	}
 
 	err := client.init()
@@ -53,10 +56,17 @@ func (dc *DiscordClient) init() error {
 	return nil
 }
 
-func (dc *DiscordClient) ListenForMessage(c chan<- string) {
-	fmt.Println("Starting to listen for messages")
+// func (dc *DiscordClient) ListenForMessage(c chan<- string) {
+// 	fmt.Println("Starting to listen for messages")
+// 	dc.Session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+// 		handleMessage(s, m, dc, c)
+// 	})
+// }
+
+type MessageCallback func(*discordgo.User, string)
+func (dc *DiscordClient) ListenForMessage(cb MessageCallback) {
 	dc.Session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		handleMessage(s, m, dc, c)
+		handleMessage(s, m, dc, cb)
 	})
 }
 
@@ -64,7 +74,14 @@ func (dc *DiscordClient) Exit() {
 	dc.Session.Close()
 }
 
+func (dc *DiscordClient) Stop() {
+	if (dc.isPlaying) {
+		dc.onStop <- true
+	}
+}
+
 func (dc *DiscordClient) Play(path string, end chan<- bool) {
+	dc.Stop()
 	dc.Voice.Speaking(true)
 
 	// Send buffer bla bla
@@ -75,24 +92,32 @@ func (dc *DiscordClient) Play(path string, end chan<- bool) {
 		return
 	}
 
+	dc.isPlaying = true
 	for _, buff := range buffer {
-		dc.Voice.OpusSend <- buff
+		select {
+			case <-dc.onStop:
+				fmt.Println("Received stop")
+				return
+			case dc.Voice.OpusSend <- buff:
+		}
 	}
 
 	end <- true
 
+	dc.isPlaying = false
 	dc.Voice.Speaking(false)
 }
 
 func (dc *DiscordClient) SendMessage(message string) {
 	fmt.Println("trying to send message")
 	_, err := dc.Session.ChannelMessageSend(dc.Channel.ID, message)
+
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, dc *DiscordClient, c chan<- string) {
+func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, dc *DiscordClient, cb MessageCallback) {
 	// Ignore messages by the bot
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -124,7 +149,7 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, dc *Discord
 		}
 
 	} else {
-		c <- m.Content
+		cb(m.Author, m.Content)
 	}
 
 }
