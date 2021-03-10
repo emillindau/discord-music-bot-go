@@ -77,6 +77,7 @@ func (dc *DiscordClient) Exit() {
 func (dc *DiscordClient) Stop() {
 	if (dc.isPlaying) {
 		dc.onStop <- true
+		//TODO: Set not playing
 	}
 }
 
@@ -111,6 +112,11 @@ func (dc *DiscordClient) Play(path string, end chan<- bool) {
 func (dc *DiscordClient) SendMessage(message string) {
 	fmt.Println("trying to send message")
 	_, err := dc.Session.ChannelMessageSend(dc.Channel.ID, message)
+	// &discordgo.MessageSend{
+	// 	Embed: &discordgo.MessageEmbed{
+
+	// 	},
+	// }
 
 	if err != nil {
 		fmt.Println(err)

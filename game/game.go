@@ -16,7 +16,7 @@ import (
 )
 
 const maxAllowedDistance = 1
-const numberOfSongs = 4
+const numberOfSongs = 20
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -80,6 +80,7 @@ func (g *Game) handleGuess(guess string) bool {
 }
 
 func (g *Game) nextSong() error {
+	// g.discordClient.Stop()
 	g.state = "next"
 	// handle game end
 	if g.playedSongs >= numberOfSongs {
@@ -178,10 +179,12 @@ func NewGame(sc *spotify.SpotifyClient, dc *client.DiscordClient, p string) (*Ga
 
 				if (res) {
 					// Just give 10p for now
+					game.state = "guess"
 					currentUser.points += 10
 					correctMsg := "That was indeed right! " + u.Username 
 					game.discordClient.SendMessage(correctMsg)
 					game.nextSong()
+					game.state = "started"
 				}
 			}
 		})
